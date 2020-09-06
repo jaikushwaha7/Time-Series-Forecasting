@@ -1,0 +1,364 @@
+---
+title: "Group assignment"
+author: "Jai Kushwaha"
+date: "21/03/2020"
+output: word_document
+---
+
+# Problem Statement:
+Sales of souvenir data have been provided in the fancy.txt file.
+Part A)
+Using the Winter-Holts methods and model the data and predict for the next 5 years.
+Your submission should contain the complete modeling steps with explanations.
+Include pictures and R-code where applicable.
+Part B)
+Using the ARIMA method model the data and predict for the next 5 years. Your
+submissions should contain the complete modeling steps with explanations. Include
+pictures and R-code where applicable.
+
+# Dataset:  fancy 
+
+Info on Data: contains monthly sales for a souvenir shop at a beach resort town in Queensland, Australia, for January 1987-December 1993
+
+```{r}
+fancy = file.choose()
+library(timeSeries)
+library(xts)
+library(tseries)
+library(forecast)
+library(quantmod)
+library(ggplot2)
+class(fancy)
+```
+```{r}
+head(fancy)
+```
+```{r}
+fancy
+```
+```{r}
+read.table(fancy,header=F)
+```
+Observation:
+84 data points.
+
+```{r}
+readLines(fancy,n=10)
+```
+
+
+```{r}
+fan = ts(as.vector(read.table(fancy,header=F)), start=1987, end=c(1993,12), frequency=12) 
+class(fan)
+```
+```{r}
+head(fan)
+```
+
+```{r}
+fan
+```
+```{r}
+plot(fan)
+```
+
+Observation:
+1. Yearly spikes are there which indicates there is seasonality.
+2. Slight increasing trend can be observed.
+
+```{r}
+tsdisplay(fan)
+```
+```{r}
+ggseasonplot(fan)
+```
+Observation:
+1. From the season plot we can see each year highest sales can be observed in the month of december.
+2. Spikes can be in the month of March.
+```{r}
+monthplot(fan)
+```
+```{r}
+ggseasonplot(fan, polar=TRUE)
+```
+
+```{r}
+TSDecmpose<-decompose(fan, type = "multiplicative") 
+plot(TSDecmpose)
+```
+Observation:
+1. From the above graph we can say there is trend and seasonality.
+```{r}
+boxplot(split(fan, cycle(fan)), names = month.abb, col = "green")
+```
+# Lets Check for stationarity of the series
+###ADF Test Hypothesis: The null hypothesis is that a unit root is present in a time series sample. The alternative hypothesis is usually stationarity or trend-stationarity.
+###kpss Test Hypothesis: The null hypothesis for the test is that the data is stationary. The alternate hypothesis for the test is that the data is not stationary.
+
+```{r}
+kpss.test(fan)
+```
+
+Observation:
+1. Series is not stationary as pvalue<.05
+
+
+```{r}
+kpss.test(log(fan))
+```
+Observation:
+1. Series still not stationary.
+```{r}
+kpss.test(diff(log(fan)))
+```
+Observation:
+1. Series now stationary.
+```{r}
+plot(diff(log(fan)))
+```
+Onservation:
+1. Still the seasonality is there.
+Lets Try with sine function
+```{r}
+kpss.test(diff(sin(fan)))
+```
+
+Observation:
+Series still stationary
+```{r}
+plot(diff(sin(fan)))
+```
+
+Onservation 
+1. Seanality removed through sine function.
+```{r}
+TSDecmposeSin<-decompose(sin(fan),  type = "multiplicative") 
+plot(TSDecmposeSin) 
+```
+```{r}
+TSDecmposeSin<-decompose(diff(sin(fan)),  type = "multiplicative") 
+plot(TSDecmposeSin) 
+```
+Observation:
+1. Some seasonality still there.
+
+# Dividing the data into training( 5 years)and testing(2 years data).
+```{r}
+fan_train = window(fan, start=1987, end=c(1991,12), frequency=12) 
+fan_test = window(fan, start = c(1992,1), end = c(1993,12), frequency = 12)
+```
+
+```{r}
+plot(fan_train)
+```
+
+```{r}
+plot(fan_test)
+```
+
+```{r}
+autoplot(fan_train, series="Train") +   
+  autolayer(fan_test, series="Test") +   
+  ggtitle("Monthly sales for a souvenir shop at a beach resort town in Queensland, Australia : Traning and Test data") +   
+  xlab("Year") + 
+  ylab("Sales") +   
+  guides(colour=guide_legend(title="Forecast"))
+```
+# Stationarity Test for test and training
+```{r}
+adf.test(fan_train)
+```
+Observation
+1. Series not stationary as the p value >.05 .
+```{r}
+kpss.test(fan_train)
+```
+Observation:
+1. Kpss test also suggesting the series is not stationary.
+
+Making the series stationary by adding the transformation funtion.
+```{r}
+kpss.test(diff(log(fan_train)))
+plot(diff(log(fan_train)))
+```
+OBservation:
+1. Series is stationary but seasonality factor still there.
+```{r}
+kpss.test(diff(sin(fan_train)))
+plot(diff(sin(fan_train)))
+```
+Observation
+1. Mean of the series is stable.
+
+# Buliding Holts Winter Model
+```{r}
+hwmodel=HoltWinters(fan_train)
+plot(hwmodel)
+
+```
+```{r}
+library(forecast)
+hwmodel1 =hw(fan_train, seasonal ="multiplicative")
+plot(hwmodel1)
+```
+```{r}
+hwforecast = forecast(hwmodel1, h =24)
+plot(hwforecast)
+```
+```{r}
+summary(hwmodel1)
+
+```
+
+# Ploting only the Test data and Predicted values.
+```{r}
+hw.mean <-forecast(hwmodel1,h=24)$mean
+
+plot(fan_test, main="Fancy Item sales", ylab="sales", xlab="Months", col="darkblue")  
+lines(hw.mean, col="red")
+legend("topleft",lty=1,bty = "n",col=c("red","blue"),c("testData","Holtswinter Forecast"))
+```
+Observation:
+1. Forecasted values are somewhat more than actual values of test data.
+```{r}
+accuracy(hwmodel1, fan_test)
+```
+Observation:
+1. There is a significant difference between Mape values of Forecast values and actual test data.
+```{r}
+shapiro.test(hwforecast$residuals)
+```
+
+Observation:
+1. As p value>.05 Null hypothesis being normally distributed. Errors are normally distributed.
+
+# Let's check for any autocorrelation between errors using box test
+```{r}
+Box.test(hwforecast$residuals, type = "Ljung-Box")
+```
+Observation:
+1. Null hypothesis of box test is the model is fit or there is not autocorrelation.
+2. As p value>.05 ie..84 there is no null hypothesis being true there is no auto correlation.
+
+# Building Arima Model
+
+```{r}
+train = diff(sin(fan_train))  # d value is 1.
+acf(train)
+```
+Observation:
+1. q value from the above graph is 1.
+```{r}
+pacf(train)
+```
+Observation:
+1. p value from the above graph is 3.
+```{r}
+fitARIMA <- arima(log(fan_train), order=c(3,1,1),seasonal = list(order = c(3,1,1), period = 12),method="ML")
+```
+
+#Prediction
+```{r}
+pred = predict(fitARIMA,n.ahead = 2*12)
+pred
+```
+
+```{r}
+predf<-2.718^pred$pred
+predf
+```
+
+```{r}
+sd_forecast<-forecast(fitARIMA, 2*12)
+sd_forecast
+```
+
+```{r}
+sd_forecast<-forecast(fitARIMA, 2*12)
+plot(sd_forecast)
+lines(fan_test, col="red")
+legend("topleft",lty=1,bty = "n",col=c("red","blue"),c("test data","ARIMAPred"))
+
+```
+
+
+# Checking for accuracy
+```{r}
+accuracy(sd_forecast)
+```
+Observation:
+1. MAPE value comparitive lower than Holtwinter model . Model is quite better.
+
+```{r}
+summary(fitARIMA)
+```
+
+```{r}
+arimaMod = auto.arima(fan_train, stepwise=FALSE, approximation=FALSE)
+```
+
+```{r}
+arimaMod.Fr = forecast(arimaMod,h=24)
+
+# plot of the prediction and of the test set
+
+plot(arimaMod.Fr)
+lines(fan_test, col="red")
+legend("topleft",lty=1,bty = "n",col=c("red","blue"),c("test data","ARIMAPred"))
+```
+```{r}
+res.fr = residuals(arimaMod.Fr)
+
+par(mfrow=c(1,3))
+
+plot(res.fr, main="Residuals from ARIMA method",
+  ylab="", xlab="Years")
+
+Acf(res.fr, main="ACF of residuals")
+
+u = residuals(arimaMod)
+
+m = mean(u)
+std = sqrt(var(u))
+hist(u, breaks=20, col="gray", prob=TRUE, 
+xlab="Residuals", main="Histogram of residuals\n with Normal Curve")
+curve(dnorm(x, mean=m, sd=std), 
+      col="black", lwd=2, add=TRUE)
+```
+
+```{r}
+accuracy(arimaMod)
+```
+Observation:
+1. MAPE value increased while comparing with ARIMA model.
+```{r}
+arimaMod$aic
+```
+AIC value also increased.
+
+# Predicting for 5 years with Holt Winters model .
+
+# Using Holtswinter MOdel
+```{r}
+hwmodel1 =hw(fan, seasonal ="multiplicative") # Only 2 years data predicted
+hwforecast5 = forecast(hwmodel1,60)
+plot(hwforecast5)
+```
+# Observation
+1. Only 2 years forecasting done
+To resolve this we use Holtswinter funtion as below
+```{r}
+hwmodel = HoltWinters(fan)
+hwforecast5 = forecast(hwmodel,60)
+hwforecast5
+plot(hwforecast5)
+```
+# Using Arima Model
+```{r}
+sd_forecast5<-forecast(fitARIMA, 7*12)
+plot(sd_forecast5)
+```
+```{r}
+accuracy(fitARIMA)
+```
+
